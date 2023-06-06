@@ -1,0 +1,174 @@
+## 2. feladat Statisztikai elemzések
+
+# Általános statisztikai elemzés
+summary(zn)
+
+# Ferdeség
+library(moments)
+skewness(zn[, 1])
+skewness(zn[, 2])
+
+# Lapultság
+library(moments)
+kurtosis(zn[, 1])
+kurtosis(zn[, 2])
+
+# Peremek függetlensége
+cor(zn)
+
+## 2. feladat BÓNUSZ
+# Eloszlás vizsgálata - Sűrűségfüggvény diagrammal
+library(ggpubr)
+ggdensity(zn[, 1], main = "Sűrűségfüggvény (1)")
+ggdensity(zn[, 2], main = "Sűrűségfüggvény (2)")
+
+# Eloszlás vizsgálata - Kvantilis diagrammal
+library(car)
+qqPlot(zn)
+
+
+
+
+
+
+
+## 3. feladat: Szintvonalas és perspektívikus ábrázolás
+
+# Adatok betöltése
+x <- zn[, 1]
+y <- zn[, 2]
+
+# Rács készítése
+grid_size <- 50
+x_range <- seq(min(x), max(x), length.out = grid_size)
+y_range <- seq(min(y), max(y), length.out = grid_size)
+
+# Kétváltozós sűrűség becslése
+library(MASS) # csomag a kde2d() függvényhez
+fhat <- kde2d(x, y, n = grid_size)
+
+# Plot-ok 2x2-es elhejezése
+par(mfrow = c(2, 2))
+
+# Perspektívikus ábrázolás
+persp(x_range, y_range, fhat$z,
+  theta = 45, phi = 20, xlab = "X", ylab = "Y", zlab = "Z",
+  main = "Perspektívikus ábrázolás"
+)
+
+# Szintvonalas ábrázolás
+contour(x_range, y_range, fhat$z, xlab = "X", ylab = "Y", main = "Szintvonalak")
+plot(zn, main = "A zn mátrix")
+
+## 3. feladat BÓNUSZ: Poisson folyamat
+
+poisson <- function() {
+  set.seed(ss + 17)
+  x <- y <- x.new <- y.new <- x.new.p <- y.new.p <- vector()
+  for (i in 1:500) {
+    x <- rpois(1, (ax + az) / (ax + ay + az))
+    y <- rpois(1, (ax + az) / (ax + ay + az))
+    x.new <- c(x.new, x)
+    y.new <- c(y.new, y)
+    x.new.p <- cumsum(x.new)
+    y.new.p <- cumsum(y.new)
+    plot(x.new.p, y.new.p,
+      type = "b", main = paste("Poisson folyamat\nIdo", i, sep = ""),
+      xlab = "x koordinatak", ylab = "y koordinatak", col = c(rep("gray", i - 1), "red"), pch = c(rep(20, 1 - 1), 1)
+    )
+  }
+  poisson_g <- matrix(c(x.new.p, y.new.p), ncol = 2)
+  return(poisson_g)
+}
+# Meghívás
+poisson_generalt <- poisson()
+
+
+
+
+
+## 4. feladat: Geometrikus Brown folyamat
+# Csomag megoldás
+library(LSMRealOptions)
+set.seed(ss + 27) # Reprodukálás
+n <- 1 # Egy szimuláció kell most csak
+t <- 100 / 365 # 100 napra szeretnénk előrevetíteni
+mu <- 30 # Várható érték
+sigma <- (ax + ay) / (ax + ay + az) # Szórás
+S0 <- 100 # A részvény kezdő értéke
+dt <- 1 / 365 # Naponta egyszer vizsgálódunk
+# Függvény hívása
+gbm <- GBM_simulate(n, t, mu, sigma, S0, dt)
+plot(gbm, type = "l")
+summary(gbm)
+skewness(gbm)
+kurtosis(gbm)
+
+# Kézi megoldás
+gbm <- function(mu, sigma, T, S0, dt, ss) {
+  set.seed(ss + 27)
+  # Lépések megadása
+  t <- seq(0, T, dt)
+
+  # Inicializáció
+  S <- numeric(length(t))
+  S[1] <- S0
+
+  # Generáljuk le a GBM szimuláció eredményeit
+  for (i in 2:length(t)) {
+    dW <- rnorm(1, mean = 0, sd = sqrt(dt))
+    S[i] <- S[i - 1] * exp((mu - 0.5 * sigma^2) * dt + sigma * dW)
+  }
+
+  # Rajzoljuk ki a gráfot
+  plot(t, S,
+    type = "l", main = "Geometriai Brown folyamat",
+    xlab = "Idő", ylab = "Ár", col = "blue"
+  )
+  return(S)
+}
+
+# Hívjuk meg a függvényt
+S <- gbm(mu = ax, sigma = (ax + ay) / (ax + ay + az), T = 100 / 365, S0 = 100, dt = 1 / 365, ss)
+summary(S)
+skewness(S)
+kurtosis(S)
+## 4. feladat Bónusz: Brown folyamat
+create_brown_process <- function(mu, sigma, time_interval) {
+  # Random növekedések generálása normális eloszlásból
+  dt <- time_interval / 100
+  n <- 100
+  dW <- rnorm(n, mean = 0, sd = sqrt(dt))
+
+  # Komulatív összeadása a generált növekedéseknek
+  W <- cumsum(dW)
+
+  # A folyamat méretezése kapott paraméterek alapján
+  W <- mu * time_interval + sigma * W
+
+  # Adjuk vissza Brown folyamatot
+  return(W)
+}
+
+# Példa
+mu <- 0
+sigma <- 1
+time_interval <- 3.14
+
+brown_process <- create_brown_process(mu, sigma, time_interval)
+plot(brown_process)
+lines(brown_process)
+
+## 5-6. feladat: Részvény elemzés
+
+details <- read.csv("E:/Letöltések/misc/gazd/META.csv") # csv fájl beolvasása
+logreturn <- c() # logreturn létrehozása
+zaro <- details$Close # A záró értékek kinyerése
+for (i in 1:length(zaro) - 1) {
+  logreturn[i] <- abs(log(zaro[i + 1] / zaro[i])) # logreturn értékek begyűjétse
+}
+chisq.test(logreturn) # Khi-négyzet teszt
+
+# Statisztikák
+hist(logreturn, main = "záró árak változása")
+plot(logreturn)
